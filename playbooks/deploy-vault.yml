@@ -1,0 +1,69 @@
+---
+- name: Deploy HashiCorp Vault as a Podman quadlet
+  hosts: wing
+  tasks:
+    - name: Create Vault directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - /opt/vault/config
+        - /opt/vault/data
+
+    - name: Copy Vault config
+      ansible.builtin.copy:
+        src: ../files/vault/vault.hcl
+        dest: /opt/vault/config/vault.hcl
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart vault
+
+    - name: Copy Vault quadlet container unit
+      ansible.builtin.copy:
+        src: ../files/vault/vault.container
+        dest: /etc/containers/systemd/vault.container
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload and restart vault
+
+    - name: Copy Vault quadlet volume unit
+      ansible.builtin.copy:
+        src: ../files/vault/vault.volume
+        dest: /etc/containers/systemd/vault.volume
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload and restart vault
+
+    - name: Reload systemd daemon
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Start and enable Vault service
+      ansible.builtin.systemd:
+        name: vault
+        state: started
+        enabled: true
+
+    - name: Open firewall port for Vault
+      ansible.posix.firewalld:
+        port: 8200/tcp
+        permanent: true
+        immediate: true
+        state: enabled
+
+  handlers:
+    - name: Restart vault
+      ansible.builtin.systemd:
+        name: vault
+        state: restarted
+
+    - name: Reload and restart vault
+      ansible.builtin.systemd:
+        daemon_reload: true
+      notify: Restart vault

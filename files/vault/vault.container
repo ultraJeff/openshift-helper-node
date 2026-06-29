@@ -1,0 +1,25 @@
+[Unit]
+Description=HashiCorp Vault
+After=local-fs.target
+
+[Container]
+Image=docker.io/hashicorp/vault:1.21
+ContainerName=vault
+PublishPort=8200:8200
+Volume=vault.volume:/vault/data:Z
+Volume=/opt/vault/config:/vault/config:Z
+AddCapability=IPC_LOCK
+Environment=VAULT_LOCAL_CONFIG=
+Environment=SKIP_CHOWN=true
+Exec=vault server -config=/vault/config/vault.hcl
+HealthCmd=wget --no-verbose --tries=1 --spider http://127.0.0.1:8200/v1/sys/health?standbyok=true || exit 1
+HealthInterval=10s
+HealthRetries=5
+HealthStartPeriod=30s
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target default.target

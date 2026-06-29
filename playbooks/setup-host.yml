@@ -1,0 +1,16 @@
+---
+- name: Base host setup for Wing
+  hosts: wing
+  tasks:
+    - name: Install base packages
+      ansible.builtin.dnf:
+        name:
+          - vim
+          - curl
+          - jq
+        state: present
+
+    - name: Enable linger for ansible user (for rootless podman if needed later)
+      ansible.builtin.command:
+        cmd: loginctl enable-linger ansible
+      changed_when: false
