@@ -2,16 +2,19 @@
 - name: Deploy HashiCorp Vault as a Podman quadlet
   hosts: wing
   tasks:
-    - name: Create Vault directories
+    - name: Create Vault config directory
       ansible.builtin.file:
-        path: "{{ item }}"
+        path: /opt/vault/config
         state: directory
         owner: root
         group: root
         mode: "0755"
-      loop:
-        - /opt/vault/config
-        - /opt/vault/data
+
+    - name: Create Vault data directory
+      ansible.builtin.file:
+        path: /opt/vault/data
+        state: directory
+        mode: "0777"
 
     - name: Copy Vault config
       ansible.builtin.copy:
@@ -31,18 +34,14 @@
         mode: "0644"
       notify: Reload and restart vault
 
-    - name: Copy Vault quadlet volume unit
-      ansible.builtin.copy:
-        src: ../files/vault/vault.volume
-        dest: /etc/containers/systemd/vault.volume
-        owner: root
-        group: root
-        mode: "0644"
+    - name: Remove old volume unit if present
+      ansible.builtin.file:
+        path: /etc/containers/systemd/vault.volume
+        state: absent
       notify: Reload and restart vault
 
-    - name: Reload systemd daemon
-      ansible.builtin.systemd:
-        daemon_reload: true
+    - name: Flush handlers to reload systemd before starting
+      ansible.builtin.meta: flush_handlers
 
     - name: Start and enable Vault service
       ansible.builtin.systemd:

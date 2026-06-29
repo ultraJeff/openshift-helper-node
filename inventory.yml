@@ -2,3 +2,4 @@ all:
   hosts:
     wing:
       ansible_host: 192.168.8.100
+      ansible_connection: local
