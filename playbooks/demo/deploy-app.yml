@@ -1,0 +1,105 @@
+---
+- name: Deploy a sample application to OpenShift
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    namespace: "{{ project_name }}"
+    app_name: "{{ app_name | default('sample-app') }}"
+    app_image: "{{ app_image | default('registry.access.redhat.com/ubi9/httpd-24:latest') }}"
+    replicas: "{{ replica_count | default('1') }}"
+  tasks:
+    - name: Ensure namespace exists
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ namespace }}"
+
+    - name: Deploy application
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: "{{ app_name }}"
+            namespace: "{{ namespace }}"
+            labels:
+              app: "{{ app_name }}"
+              app.kubernetes.io/managed-by: ansible
+              provisioned-by: rhdh
+          spec:
+            replicas: "{{ replicas | int }}"
+            selector:
+              matchLabels:
+                app: "{{ app_name }}"
+            template:
+              metadata:
+                labels:
+                  app: "{{ app_name }}"
+              spec:
+                containers:
+                  - name: "{{ app_name }}"
+                    image: "{{ app_image }}"
+                    ports:
+                      - containerPort: 8080
+                    resources:
+                      requests:
+                        cpu: 100m
+                        memory: 128Mi
+                      limits:
+                        cpu: 250m
+                        memory: 256Mi
+
+    - name: Create service
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: "{{ app_name }}"
+            namespace: "{{ namespace }}"
+            labels:
+              app: "{{ app_name }}"
+          spec:
+            selector:
+              app: "{{ app_name }}"
+            ports:
+              - port: 8080
+                targetPort: 8080
+
+    - name: Create route
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: route.openshift.io/v1
+          kind: Route
+          metadata:
+            name: "{{ app_name }}"
+            namespace: "{{ namespace }}"
+            labels:
+              app: "{{ app_name }}"
+          spec:
+            to:
+              kind: Service
+              name: "{{ app_name }}"
+            port:
+              targetPort: 8080
+            tls:
+              termination: edge
+
+    - name: Get route URL
+      kubernetes.core.k8s_info:
+        api_version: route.openshift.io/v1
+        kind: Route
+        name: "{{ app_name }}"
+        namespace: "{{ namespace }}"
+      register: route_info
+
+    - name: Report success
+      ansible.builtin.debug:
+        msg: "Application '{{ app_name }}' deployed to {{ namespace }}. URL: https://{{ route_info.resources[0].spec.host }}"

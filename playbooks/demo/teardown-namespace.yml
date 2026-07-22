@@ -1,0 +1,20 @@
+---
+- name: Tear down a project namespace on OpenShift
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    namespace: "{{ project_name }}"
+  tasks:
+    - name: Delete the namespace
+      kubernetes.core.k8s:
+        state: absent
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ namespace }}"
+
+    - name: Report success
+      ansible.builtin.debug:
+        msg: "Namespace '{{ namespace }}' and all its resources have been deleted"

@@ -1,0 +1,60 @@
+---
+- name: Provision a new project namespace on OpenShift
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    namespace: "{{ project_name }}"
+    cpu_limit: "{{ cpu_quota | default('4') }}"
+    memory_limit: "{{ memory_quota | default('8Gi') }}"
+  tasks:
+    - name: Create the namespace
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: ansible
+              provisioned-by: rhdh
+
+    - name: Apply resource quota
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: ResourceQuota
+          metadata:
+            name: "{{ namespace }}-quota"
+            namespace: "{{ namespace }}"
+          spec:
+            hard:
+              requests.cpu: "{{ cpu_limit }}"
+              requests.memory: "{{ memory_limit }}"
+              limits.cpu: "{{ cpu_limit }}"
+              limits.memory: "{{ memory_limit }}"
+
+    - name: Apply default limit range
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: LimitRange
+          metadata:
+            name: default-limits
+            namespace: "{{ namespace }}"
+          spec:
+            limits:
+              - default:
+                  cpu: 500m
+                  memory: 512Mi
+                defaultRequest:
+                  cpu: 100m
+                  memory: 128Mi
+                type: Container
+
+    - name: Report success
+      ansible.builtin.debug:
+        msg: "Namespace '{{ namespace }}' provisioned with quota: {{ cpu_limit }} CPU, {{ memory_limit }} memory"
