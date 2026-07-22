@@ -1,0 +1,60 @@
+---
+- name: Deploy Nginx reverse proxy as a Podman quadlet
+  hosts: wing
+  tasks:
+    - name: Create Nginx directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - /opt/nginx
+        - /opt/nginx/conf.d
+        - /opt/nginx/tls
+
+    - name: Copy Nginx quadlet container unit
+      ansible.builtin.copy:
+        src: ../files/nginx/nginx.container
+        dest: /etc/containers/systemd/nginx-proxy.container
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Reload systemd to pick up quadlet
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Copy Nginx main config
+      ansible.builtin.copy:
+        src: ../files/nginx/nginx.conf
+        dest: /opt/nginx/nginx.conf
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Copy Nginx site configs
+      ansible.builtin.copy:
+        src: ../files/nginx/conf.d/
+        dest: /opt/nginx/conf.d/
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Generate self-signed TLS cert for Nginx
+      ansible.builtin.command:
+        cmd: >
+          openssl req -x509 -nodes -days 3650
+          -newkey rsa:2048
+          -keyout /opt/nginx/tls/aap.key
+          -out /opt/nginx/tls/aap.crt
+          -subj "/CN=aap.ultra.lab"
+          -addext "subjectAltName=DNS:aap.ultra.lab"
+        creates: /opt/nginx/tls/aap.crt
+
+    - name: Start and enable Nginx service
+      ansible.builtin.systemd:
+        name: nginx-proxy
+        state: restarted
+        enabled: true
