@@ -1,0 +1,9 @@
+apiVersion: backstage.io/v1alpha1
+kind: Location
+metadata:
+  name: ansible-templates
+  description: Ansible-powered software templates for OpenShift self-service
+spec:
+  targets:
+    - ./provision-namespace/template.yaml
+    - ./deploy-app/template.yaml

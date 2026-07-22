@@ -1,0 +1,63 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: provision-namespace
+  title: Provision OpenShift Namespace
+  description: Create a new OpenShift project with resource quotas using Ansible Automation Platform
+  tags:
+    - ansible
+    - openshift
+    - infrastructure
+spec:
+  owner: group:default/backstage-admins
+  type: infrastructure
+
+  parameters:
+    - title: Namespace Configuration
+      required:
+        - projectName
+      properties:
+        projectName:
+          title: Project Name
+          type: string
+          description: The name of the OpenShift namespace to create
+          pattern: "^[a-z][a-z0-9-]*$"
+          ui:help: "Lowercase letters, numbers, and dashes only"
+        cpuQuota:
+          title: CPU Quota
+          type: string
+          description: Maximum CPU cores for the namespace
+          default: "4"
+          enum:
+            - "2"
+            - "4"
+            - "8"
+            - "16"
+        memoryQuota:
+          title: Memory Quota
+          type: string
+          description: Maximum memory for the namespace
+          default: 8Gi
+          enum:
+            - 4Gi
+            - 8Gi
+            - 16Gi
+            - 32Gi
+
+  steps:
+    - id: provision
+      name: Provision namespace via Ansible
+      action: rhaap:launch-job-template
+      input:
+        token: ${{ secrets.AAP_TOKEN }}
+        values:
+          template: Provision Namespace
+          extraVariables:
+            project_name: ${{ parameters.projectName }}
+            cpu_quota: ${{ parameters.cpuQuota }}
+            memory_quota: ${{ parameters.memoryQuota }}
+
+  output:
+    links:
+      - title: View namespace in OpenShift Console
+        url: https://console-openshift-console.apps.tallgeese.ultra.lab/k8s/cluster/namespaces/${{ parameters.projectName }}
