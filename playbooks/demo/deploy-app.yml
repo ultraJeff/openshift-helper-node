@@ -7,7 +7,7 @@
     namespace: "{{ project_name }}"
     app_name: "{{ app_name | default('sample-app') }}"
     app_image: "{{ app_image | default('registry.access.redhat.com/ubi9/httpd-24:latest') }}"
-    replicas: "{{ replica_count | default(1) | int }}"
+    replicas: 1
   tasks:
     - name: Ensure namespace exists
       kubernetes.core.k8s:
