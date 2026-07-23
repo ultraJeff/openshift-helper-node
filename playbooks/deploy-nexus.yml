@@ -1,0 +1,44 @@
+---
+- name: Deploy Sonatype Nexus as a Podman quadlet
+  hosts: wing
+  tasks:
+    - name: Copy Nexus quadlet container unit
+      ansible.builtin.copy:
+        src: ../files/nexus/nexus.container
+        dest: /etc/containers/systemd/nexus.container
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Reload systemd to pick up quadlet
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Start and enable Nexus service
+      ansible.builtin.systemd:
+        name: nexus
+        state: started
+        enabled: true
+
+    - name: Open firewall ports for Nexus
+      ansible.posix.firewalld:
+        port: "{{ item }}"
+        permanent: true
+        immediate: true
+        state: enabled
+      loop:
+        - 8090/tcp
+        - 5000/tcp
+
+    - name: Update Nginx config for Nexus proxy
+      ansible.builtin.copy:
+        src: ../files/nginx/conf.d/nexus.conf
+        dest: /opt/nginx/conf.d/nexus.conf
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Restart Nginx to pick up new config
+      ansible.builtin.systemd:
+        name: nginx-proxy
+        state: restarted

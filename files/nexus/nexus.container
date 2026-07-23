@@ -1,0 +1,19 @@
+[Unit]
+Description=Sonatype Nexus Repository Manager
+After=local-fs.target network-online.target
+
+[Container]
+Image=docker.io/sonatype/nexus3:latest
+ContainerName=nexus
+PublishPort=8090:8081
+PublishPort=5000:5000
+Volume=/opt/nexus-data:/nexus-data
+SecurityLabelDisable=true
+Environment="INSTALL4J_ADD_VM_PARAMS=-Xms2g -Xmx4g -XX:MaxDirectMemorySize=2g"
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target default.target
