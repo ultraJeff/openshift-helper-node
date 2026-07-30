@@ -1,0 +1,92 @@
+{
+  "id": "rhdh",
+  "realm": "rhdh",
+  "displayName": "RHDH Realm",
+  "enabled": true,
+  "sslRequired": "external",
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "email": "admin@ultra.lab",
+      "firstName": "Admin",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "<USER_PASSWORD>",
+          "temporary": false
+        }
+      ],
+      "groups": ["/rhdh-users"]
+    },
+    {
+      "username": "user1",
+      "enabled": true,
+      "email": "user1@ultra.lab",
+      "firstName": "User",
+      "lastName": "One",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "<USER_PASSWORD>",
+          "temporary": false
+        }
+      ],
+      "groups": ["/rhdh-users"]
+    },
+    {
+      "username": "service-account-rhdh",
+      "enabled": true,
+      "serviceAccountClientId": "rhdh",
+      "clientRoles": {
+        "realm-management": [
+          "view-users",
+          "query-groups",
+          "query-users"
+        ]
+      }
+    }
+  ],
+  "groups": [
+    {
+      "name": "rhdh-users",
+      "path": "/rhdh-users"
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "rhdh",
+      "name": "RHDH Client",
+      "description": "Red Hat Developer Hub OIDC Client",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "secret": "<RHDH_CLIENT_SECRET>",
+      "redirectUris": [
+        "https://backstage-developer-hub-rhdh.apps.tallgeese.ultra.lab/api/auth/oidc/handler/frame"
+      ],
+      "webOrigins": [
+        "https://backstage-developer-hub-rhdh.apps.tallgeese.ultra.lab"
+      ],
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "address",
+        "phone",
+        "offline_access",
+        "microprofile-jwt"
+      ]
+    }
+  ]
+}

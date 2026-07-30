@@ -1,0 +1,20 @@
+[Unit]
+Description=Keycloak PostgreSQL Database
+After=local-fs.target network-online.target
+
+[Container]
+Image=docker.io/library/postgres:15
+ContainerName=keycloak-db
+PublishPort=5433:5432
+Volume=/opt/keycloak-db/data:/var/lib/postgresql/data
+SecurityLabelDisable=true
+Environment=POSTGRES_DB=keycloak
+Environment=POSTGRES_USER=<DB_USERNAME>
+Environment=POSTGRES_PASSWORD=<DB_PASSWORD>
+
+[Service]
+Restart=always
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target default.target

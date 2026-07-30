@@ -1,0 +1,111 @@
+---
+- name: Deploy Keycloak as Podman quadlets (PostgreSQL + Keycloak)
+  hosts: wing
+  tasks:
+    - name: Create Keycloak DB data directory
+      ansible.builtin.file:
+        path: /opt/keycloak-db/data
+        state: directory
+        mode: "0777"
+
+    - name: Create Keycloak import directory
+      ansible.builtin.file:
+        path: /opt/keycloak/import
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Copy realm import file
+      ansible.builtin.copy:
+        src: ../files/keycloak/rhdh-realm.json
+        dest: /opt/keycloak/import/rhdh-realm.json
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart keycloak
+
+    - name: Copy Keycloak DB quadlet container unit
+      ansible.builtin.copy:
+        src: ../files/keycloak/keycloak-db.container
+        dest: /etc/containers/systemd/keycloak-db.container
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload and restart keycloak-db
+
+    - name: Flush handlers to reload systemd before starting DB
+      ansible.builtin.meta: flush_handlers
+
+    - name: Start and enable Keycloak DB service
+      ansible.builtin.systemd:
+        name: keycloak-db
+        state: started
+        enabled: true
+
+    - name: Wait for PostgreSQL to be ready
+      ansible.builtin.wait_for:
+        port: 5432
+        host: 127.0.0.1
+        delay: 5
+        timeout: 60
+
+    - name: Copy Keycloak quadlet container unit
+      ansible.builtin.copy:
+        src: ../files/keycloak/keycloak.container
+        dest: /etc/containers/systemd/keycloak.container
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload and restart keycloak
+
+    - name: Flush handlers to reload systemd before starting Keycloak
+      ansible.builtin.meta: flush_handlers
+
+    - name: Start and enable Keycloak service
+      ansible.builtin.systemd:
+        name: keycloak
+        state: started
+        enabled: true
+
+    - name: Open firewall port for Keycloak
+      ansible.posix.firewalld:
+        port: 8080/tcp
+        permanent: true
+        immediate: true
+        state: enabled
+
+    - name: Copy Nginx proxy config for Keycloak
+      ansible.builtin.copy:
+        src: ../files/nginx/conf.d/keycloak.conf
+        dest: /opt/nginx/conf.d/keycloak.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart nginx
+
+  handlers:
+    - name: Restart keycloak
+      ansible.builtin.systemd:
+        name: keycloak
+        state: restarted
+
+    - name: Reload and restart keycloak-db
+      ansible.builtin.systemd:
+        daemon_reload: true
+      notify: Restart keycloak-db
+
+    - name: Restart keycloak-db
+      ansible.builtin.systemd:
+        name: keycloak-db
+        state: restarted
+
+    - name: Reload and restart keycloak
+      ansible.builtin.systemd:
+        daemon_reload: true
+      notify: Restart keycloak
+
+    - name: Restart nginx
+      ansible.builtin.systemd:
+        name: nginx-proxy
+        state: restarted

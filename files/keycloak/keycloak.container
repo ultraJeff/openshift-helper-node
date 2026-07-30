@@ -1,0 +1,28 @@
+[Unit]
+Description=Keycloak Identity Provider
+After=local-fs.target network-online.target keycloak-db.service
+
+[Container]
+Image=quay.io/keycloak/keycloak:26.2
+ContainerName=keycloak
+PublishPort=8180:8080
+Volume=/opt/keycloak/import:/opt/keycloak/data/import:Z,ro
+SecurityLabelDisable=true
+Environment=KC_HOSTNAME=https://sso.ultra.lab
+Environment=KC_PROXY_HEADERS=xforwarded
+Environment=KC_HTTP_ENABLED=true
+Environment=KC_HTTP_PORT=8080
+Environment=KC_DB=postgres
+Environment=KC_DB_URL=jdbc:postgresql://192.168.8.100:5433/keycloak
+Environment=KC_DB_USERNAME=<DB_USERNAME>
+Environment=KC_DB_PASSWORD=<DB_PASSWORD>
+Environment=KC_BOOTSTRAP_ADMIN_USERNAME=<ADMIN_USERNAME>
+Environment=KC_BOOTSTRAP_ADMIN_PASSWORD=<ADMIN_PASSWORD>
+Exec=start --import-realm --optimized=false
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target default.target
