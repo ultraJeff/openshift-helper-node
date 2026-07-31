@@ -1,0 +1,143 @@
+{
+  "id": "openshift",
+  "realm": "openshift",
+  "displayName": "OpenShift Realm",
+  "enabled": true,
+  "sslRequired": "external",
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "email": "admin@ultra.lab",
+      "firstName": "Admin",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "<USER_PASSWORD>",
+          "temporary": false
+        }
+      ],
+      "groups": ["/openshift-admins"]
+    },
+    {
+      "username": "developer",
+      "enabled": true,
+      "email": "developer@ultra.lab",
+      "firstName": "Developer",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "<USER_PASSWORD>",
+          "temporary": false
+        }
+      ],
+      "groups": ["/openshift-developers"]
+    }
+  ],
+  "groups": [
+    {
+      "name": "openshift-admins",
+      "path": "/openshift-admins"
+    },
+    {
+      "name": "openshift-developers",
+      "path": "/openshift-developers"
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "groups",
+      "description": "Group membership",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "introspection.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "groups"
+          }
+        }
+      ]
+    }
+  ],
+  "defaultDefaultClientScopes": [
+    "web-origins",
+    "acr",
+    "profile",
+    "roles",
+    "email",
+    "groups"
+  ],
+  "clients": [
+    {
+      "clientId": "openshift",
+      "name": "OpenShift Console",
+      "description": "OpenShift OAuth OIDC Client",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "secret": "<OPENSHIFT_CLIENT_SECRET>",
+      "redirectUris": [
+        "https://oauth-openshift.apps.tallgeese.ultra.lab/oauth2callback/keycloak"
+      ],
+      "webOrigins": [
+        "https://console-openshift-console.apps.tallgeese.ultra.lab"
+      ],
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email",
+        "groups"
+      ]
+    },
+    {
+      "clientId": "argocd",
+      "name": "ArgoCD",
+      "description": "ArgoCD OIDC Client (PKCE)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "redirectUris": [
+        "https://openshift-gitops-server-openshift-gitops.apps.tallgeese.ultra.lab/auth/callback",
+        "http://localhost:8085/auth/callback"
+      ],
+      "webOrigins": [
+        "https://openshift-gitops-server-openshift-gitops.apps.tallgeese.ultra.lab"
+      ],
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email",
+        "groups"
+      ]
+    }
+  ]
+}

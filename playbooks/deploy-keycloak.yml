@@ -16,10 +16,19 @@
         group: root
         mode: "0755"
 
-    - name: Copy realm import file
+    - name: Copy RHDH realm import file
       ansible.builtin.copy:
         src: ../files/keycloak/rhdh-realm.json
         dest: /opt/keycloak/import/rhdh-realm.json
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart keycloak
+
+    - name: Copy OpenShift realm import file
+      ansible.builtin.copy:
+        src: ../files/keycloak/openshift-realm.json
+        dest: /opt/keycloak/import/openshift-realm.json
         owner: root
         group: root
         mode: "0644"
