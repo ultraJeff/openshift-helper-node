@@ -1,4 +1,5 @@
 {
+  "_comment": "No clientScopes defined here — Keycloak auto-creates all built-in scopes (profile, email, address, phone, etc.) when a realm import omits clientScopes. If you add a clientScopes array, Keycloak treats it as the complete list and skips built-in scope creation. See openshift-realm.json.example for an example where scopes must be explicitly defined.",
   "id": "rhdh",
   "realm": "rhdh",
   "displayName": "RHDH Realm",
