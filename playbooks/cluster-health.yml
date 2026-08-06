@@ -1,0 +1,101 @@
+---
+- name: Tallgeese cluster health check
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Check API server health
+      ansible.builtin.command: oc get --raw /healthz
+      register: api_health
+      ignore_errors: true
+      changed_when: false
+
+    - name: Get node status
+      ansible.builtin.command: oc get nodes -o wide
+      register: node_status
+      ignore_errors: true
+      changed_when: false
+
+    - name: Get cluster operators
+      ansible.builtin.command: oc get clusteroperators
+      register: cluster_operators
+      ignore_errors: true
+      changed_when: false
+
+    - name: Check etcd pods
+      ansible.builtin.command: oc get pods -n openshift-etcd -l app=etcd
+      register: etcd_pods
+      ignore_errors: true
+      changed_when: false
+
+    - name: Check etcd member health
+      ansible.builtin.command: >
+        oc rsh -n openshift-etcd
+        $(oc get pods -n openshift-etcd -l app=etcd -o jsonpath='{.items[0].metadata.name}')
+        etcdctl endpoint health --cluster
+      register: etcd_health
+      ignore_errors: true
+      changed_when: false
+
+    - name: Get cluster version
+      ansible.builtin.command: oc get clusterversion
+      register: cluster_version
+      ignore_errors: true
+      changed_when: false
+
+    - name: Check certificate expiry
+      ansible.builtin.shell: |
+        oc get secret -A -o json | \
+          jq -r '.items[] |
+            select(.type == "kubernetes.io/tls") |
+            select(.metadata.namespace | startswith("openshift-")) |
+            "\(.metadata.namespace)/\(.metadata.name)"' | \
+          head -20 | while read secret; do
+            ns=$(echo "$secret" | cut -d/ -f1)
+            name=$(echo "$secret" | cut -d/ -f2)
+            expiry=$(oc get secret "$name" -n "$ns" -o jsonpath='{.data.tls\.crt}' 2>/dev/null | \
+              base64 -d 2>/dev/null | openssl x509 -enddate -noout 2>/dev/null | cut -d= -f2)
+            if [ -n "$expiry" ]; then
+              echo "$secret expires: $expiry"
+            fi
+          done
+      register: cert_expiry
+      ignore_errors: true
+      changed_when: false
+
+    - name: Check degraded cluster operators
+      ansible.builtin.shell: >
+        oc get co -o json |
+        jq -r '.items[] |
+          select(.status.conditions[] |
+            select(.type == "Degraded" and .status == "True")) |
+          .metadata.name'
+      register: degraded_operators
+      ignore_errors: true
+      changed_when: false
+
+    - name: Display health summary
+      ansible.builtin.debug:
+        msg: |
+          === TALLGEESE CLUSTER HEALTH ===
+
+          API Server: {{ 'HEALTHY' if api_health.rc == 0 else 'UNREACHABLE' }}
+
+          Cluster Version:
+          {{ cluster_version.stdout | default('Unable to retrieve') }}
+
+          Nodes:
+          {{ node_status.stdout | default('Unable to retrieve') }}
+
+          etcd Pods:
+          {{ etcd_pods.stdout | default('Unable to retrieve') }}
+
+          etcd Health:
+          {{ etcd_health.stdout | default('Unable to retrieve') }}
+
+          Degraded Operators:
+          {{ degraded_operators.stdout | default('None') | default('None', true) }}
+
+          Certificate Expiry (sample):
+          {{ cert_expiry.stdout | default('Unable to retrieve') }}

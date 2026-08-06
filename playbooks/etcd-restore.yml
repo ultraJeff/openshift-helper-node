@@ -1,0 +1,106 @@
+---
+- name: Restore etcd from backup
+  hosts: "{{ recovery_node | default('tallgeese') }}"
+  gather_facts: false
+
+  vars:
+    wing_backup_dir: /opt/backups/etcd
+    restore_dir: /home/core/restore
+
+  tasks:
+    - name: Verify backup file is specified
+      ansible.builtin.fail:
+        msg: "Set backup_file to the backup filename on Wing (e.g. etcd-backup-20260804-120000.tar.gz)"
+      when: backup_file is not defined
+
+    - name: Create restore directory
+      ansible.builtin.file:
+        path: "{{ restore_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Copy backup from Wing to recovery node
+      ansible.builtin.copy:
+        src: "{{ wing_backup_dir }}/{{ backup_file }}"
+        dest: "{{ restore_dir }}/{{ backup_file }}"
+
+    - name: Extract backup
+      ansible.builtin.unarchive:
+        src: "{{ restore_dir }}/{{ backup_file }}"
+        dest: "{{ restore_dir }}"
+        remote_src: true
+
+    - name: Find the etcd snapshot file
+      ansible.builtin.find:
+        paths: "{{ restore_dir }}"
+        patterns: "snapshot_*.db"
+      register: snapshot_files
+
+    - name: Find the static resources backup
+      ansible.builtin.find:
+        paths: "{{ restore_dir }}"
+        patterns: "static_kuberesources_*.tar.gz"
+      register: static_files
+
+    - name: Verify backup contents
+      ansible.builtin.fail:
+        msg: "Backup does not contain expected etcd snapshot or static resources"
+      when: snapshot_files.files | length == 0 or static_files.files | length == 0
+
+    - name: Run etcd restore
+      ansible.builtin.command: >
+        sudo /usr/local/bin/cluster-restore.sh {{ restore_dir }}
+      register: restore_result
+
+    - name: Display restore output
+      ansible.builtin.debug:
+        msg: "{{ restore_result.stdout }}"
+
+    - name: Clean up restore directory
+      ansible.builtin.file:
+        path: "{{ restore_dir }}"
+        state: absent
+
+- name: Verify cluster recovery
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Wait for API server to become available
+      ansible.builtin.command: oc get --raw /healthz
+      register: api_health
+      retries: 60
+      delay: 15
+      until: api_health.rc == 0
+      changed_when: false
+      ignore_errors: true
+
+    - name: Check node status
+      ansible.builtin.command: oc get nodes
+      register: nodes
+      changed_when: false
+      ignore_errors: true
+
+    - name: Check cluster operators
+      ansible.builtin.shell: >
+        oc get co -o json |
+        jq -r '.items[] |
+          select(.status.conditions[] |
+            select(.type == "Degraded" and .status == "True")) |
+          .metadata.name'
+      register: degraded
+      changed_when: false
+      ignore_errors: true
+
+    - name: Display recovery status
+      ansible.builtin.debug:
+        msg: |
+          === RESTORE RESULT ===
+          API Server: {{ 'HEALTHY' if api_health.rc == 0 else 'STILL DOWN — give it more time' }}
+
+          Nodes:
+          {{ nodes.stdout | default('Unable to retrieve') }}
+
+          Degraded Operators:
+          {{ degraded.stdout | default('None') | default('None', true) }}

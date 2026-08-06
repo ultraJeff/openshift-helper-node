@@ -1,0 +1,68 @@
+---
+- name: Monitor OpenShift agent-based installation
+  hosts: wing
+  gather_facts: false
+
+  vars:
+    install_dir: /opt/ocp-install/workdir
+    kubeconfig_backup_dir: /opt/backups/kubeconfig
+
+  tasks:
+    - name: Wait for bootstrap to complete
+      ansible.builtin.command: >
+        openshift-install agent wait-for bootstrap-complete
+        --dir {{ install_dir }} --log-level=info
+      register: bootstrap_result
+      async: 3600
+      poll: 30
+
+    - name: Display bootstrap result
+      ansible.builtin.debug:
+        msg: "Bootstrap complete: {{ bootstrap_result.stdout_lines[-3:] | join('\n') }}"
+
+    - name: Wait for install to complete
+      ansible.builtin.command: >
+        openshift-install agent wait-for install-complete
+        --dir {{ install_dir }} --log-level=info
+      register: install_result
+      async: 3600
+      poll: 30
+
+    - name: Display install result
+      ansible.builtin.debug:
+        msg: "{{ install_result.stdout_lines[-5:] | join('\n') }}"
+
+    - name: Save kubeconfig to Wing
+      block:
+        - name: Create kubeconfig backup directory
+          ansible.builtin.file:
+            path: "{{ kubeconfig_backup_dir }}"
+            state: directory
+            mode: "0700"
+
+        - name: Copy kubeconfig
+          ansible.builtin.copy:
+            src: "{{ install_dir }}/auth/kubeconfig"
+            dest: "{{ kubeconfig_backup_dir }}/kubeconfig-tallgeese"
+            remote_src: true
+            mode: "0600"
+
+        - name: Read kubeadmin password
+          ansible.builtin.slurp:
+            src: "{{ install_dir }}/auth/kubeadmin-password"
+          register: kubeadmin_pw
+
+    - name: Display access info
+      ansible.builtin.debug:
+        msg: |
+          === INSTALL COMPLETE ===
+          Kubeconfig saved to: {{ kubeconfig_backup_dir }}/kubeconfig-tallgeese
+          Kubeadmin password:  {{ kubeadmin_pw.content | b64decode }}
+
+          To access the cluster:
+            export KUBECONFIG={{ kubeconfig_backup_dir }}/kubeconfig-tallgeese
+            oc get nodes
+            oc get co
+
+          Next step:
+            ansible-playbook playbooks/post-install.yml

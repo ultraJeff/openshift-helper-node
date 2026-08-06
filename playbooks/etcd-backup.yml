@@ -1,0 +1,81 @@
+---
+- name: Backup etcd to Wing
+  hosts: "{{ backup_node | default('tallgeese') }}"
+  gather_facts: false
+
+  vars:
+    backup_dir: /home/core/backup
+    wing_backup_dir: /opt/backups/etcd
+    retention_count: 5
+
+  tasks:
+    - name: Run etcd backup on control plane node
+      ansible.builtin.command: sudo /usr/local/bin/cluster-backup.sh {{ backup_dir }}
+      register: backup_result
+
+    - name: Find the backup files
+      ansible.builtin.find:
+        paths: "{{ backup_dir }}"
+        patterns: "*.db,*.tar.gz"
+      register: backup_files
+
+    - name: Create timestamped archive
+      ansible.builtin.shell: |
+        ts=$(date +%Y%m%d-%H%M%S)
+        tar czf /home/core/etcd-backup-${ts}.tar.gz -C {{ backup_dir }} .
+        echo "/home/core/etcd-backup-${ts}.tar.gz"
+      register: archive_path
+
+    - name: Fetch backup to Wing
+      ansible.builtin.fetch:
+        src: "{{ archive_path.stdout }}"
+        dest: "{{ wing_backup_dir }}/"
+        flat: true
+
+    - name: Clean up backup files on node
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ backup_dir }}"
+        - "{{ archive_path.stdout }}"
+
+- name: Rotate old backups on Wing
+  hosts: wing
+  gather_facts: false
+
+  vars:
+    wing_backup_dir: /opt/backups/etcd
+    retention_count: 5
+
+  tasks:
+    - name: Ensure backup directory exists
+      ansible.builtin.file:
+        path: "{{ wing_backup_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: List existing backups sorted by time
+      ansible.builtin.find:
+        paths: "{{ wing_backup_dir }}"
+        patterns: "etcd-backup-*.tar.gz"
+      register: existing_backups
+
+    - name: Remove old backups beyond retention
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ (existing_backups.files | sort(attribute='mtime') | list)[:-retention_count] }}"
+      when: existing_backups.files | length > retention_count
+
+    - name: List current backups
+      ansible.builtin.find:
+        paths: "{{ wing_backup_dir }}"
+        patterns: "etcd-backup-*.tar.gz"
+      register: final_backups
+
+    - name: Display backup status
+      ansible.builtin.debug:
+        msg: |
+          Backups on Wing ({{ wing_backup_dir }}):
+          {{ final_backups.files | map(attribute='path') | list | join('\n') }}

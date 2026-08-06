@@ -1,0 +1,93 @@
+---
+- name: Post-install bootstrap for tallgeese
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    bootstrap_repo: https://github.com/ultraJeff/openshift-bootstrap-gitops.git
+    bootstrap_branch: main
+    work_dir: /tmp/bootstrap-gitops
+
+  tasks:
+    - name: Verify cluster access
+      ansible.builtin.command: oc get nodes
+      register: nodes
+      changed_when: false
+
+    - name: Display cluster state
+      ansible.builtin.debug:
+        msg: "{{ nodes.stdout }}"
+
+    - name: Clone bootstrap-gitops repo
+      ansible.builtin.git:
+        repo: "{{ bootstrap_repo }}"
+        dest: "{{ work_dir }}"
+        version: "{{ bootstrap_branch }}"
+        depth: 1
+        force: true
+
+    - name: Install OpenShift GitOps operator
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ work_dir }}/operators/openshift-gitops/subscription.yaml"
+      ignore_errors: true
+
+    - name: Wait for OpenShift GitOps operator to be ready
+      ansible.builtin.shell: >
+        oc get csv -n openshift-gitops -o json |
+        jq -r '.items[] | select(.metadata.name | startswith("openshift-gitops")) | .status.phase'
+      register: gitops_csv
+      retries: 30
+      delay: 15
+      until: gitops_csv.stdout == 'Succeeded'
+      changed_when: false
+
+    - name: Wait for ArgoCD server to be available
+      ansible.builtin.command: >
+        oc rollout status deployment openshift-gitops-server -n openshift-gitops --timeout=300s
+      register: argocd_ready
+
+    - name: Apply cluster-config ApplicationSet
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ work_dir }}/applicationsets/cluster-config.yaml"
+      ignore_errors: true
+
+    - name: Wait for cluster operators to stabilize
+      ansible.builtin.shell: >
+        oc get co -o json |
+        jq '[.items[] |
+          select(.status.conditions[] |
+            select((.type == "Progressing" and .status == "True") or
+                   (.type == "Degraded" and .status == "True")))] |
+          length'
+      register: unstable_operators
+      retries: 60
+      delay: 30
+      until: unstable_operators.stdout | int == 0
+      changed_when: false
+      ignore_errors: true
+
+    - name: Get final cluster state
+      ansible.builtin.command: oc get co
+      register: final_co
+      changed_when: false
+      ignore_errors: true
+
+    - name: Display result
+      ansible.builtin.debug:
+        msg: |
+          === POST-INSTALL COMPLETE ===
+          Unstable operators remaining: {{ unstable_operators.stdout | default('unknown') }}
+
+          Cluster Operators:
+          {{ final_co.stdout | default('Unable to retrieve') }}
+
+          ArgoCD will continue syncing remaining applications.
+          Monitor at: https://openshift-gitops-server-openshift-gitops.apps.tallgeese.ultra.lab
+
+    - name: Clean up work directory
+      ansible.builtin.file:
+        path: "{{ work_dir }}"
+        state: absent

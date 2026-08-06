@@ -1,0 +1,135 @@
+---
+- name: Generate OpenShift agent-based install PXE files
+  hosts: wing
+  gather_facts: false
+
+  vars:
+    ocp_version: "4.21.23"
+    install_dir: /opt/ocp-install
+    bootstrap_repo: https://github.com/ultraJeff/openshift-bootstrap-gitops.git
+    bootstrap_branch: main
+    compact_cluster_path: infrastructure/compact-cluster
+    router_host: 192.168.8.1
+    router_user: root
+
+  tasks:
+    - name: Install required packages
+      ansible.builtin.dnf:
+        name:
+          - git
+          - tar
+          - jq
+        state: present
+
+    - name: Create install directory
+      ansible.builtin.file:
+        path: "{{ install_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Download openshift-install binary
+      ansible.builtin.unarchive:
+        src: "https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/{{ ocp_version }}/openshift-install-linux.tar.gz"
+        dest: /usr/local/bin
+        remote_src: true
+        include:
+          - openshift-install
+        mode: "0755"
+
+    - name: Clone bootstrap-gitops repo
+      ansible.builtin.git:
+        repo: "{{ bootstrap_repo }}"
+        dest: "{{ install_dir }}/bootstrap-gitops"
+        version: "{{ bootstrap_branch }}"
+        depth: 1
+        force: true
+
+    - name: Verify install-config.yaml exists
+      ansible.builtin.stat:
+        path: "{{ install_dir }}/bootstrap-gitops/{{ compact_cluster_path }}/install-config.yaml"
+      register: install_config
+
+    - name: Fail if install-config.yaml is missing
+      ansible.builtin.fail:
+        msg: |
+          install-config.yaml not found. The gitignored config files must exist locally.
+          Copy the .example files and fill in real values:
+            cp install-config.yaml.example install-config.yaml
+            cp agent-config.yaml.example agent-config.yaml
+      when: not install_config.stat.exists
+
+    - name: Create working directory for this install
+      ansible.builtin.file:
+        path: "{{ install_dir }}/workdir"
+        state: directory
+        mode: "0755"
+
+    - name: Clean any previous workdir contents
+      ansible.builtin.shell: rm -rf {{ install_dir }}/workdir/*
+
+    - name: Copy install configs to workdir
+      ansible.builtin.copy:
+        src: "{{ install_dir }}/bootstrap-gitops/{{ compact_cluster_path }}/{{ item }}"
+        dest: "{{ install_dir }}/workdir/{{ item }}"
+        remote_src: true
+      loop:
+        - install-config.yaml
+        - agent-config.yaml
+
+    - name: Copy MachineConfig manifests to workdir
+      ansible.builtin.copy:
+        src: "{{ install_dir }}/bootstrap-gitops/{{ compact_cluster_path }}/openshift/"
+        dest: "{{ install_dir }}/workdir/openshift/"
+        remote_src: true
+
+    - name: Generate PXE files
+      ansible.builtin.command: >
+        openshift-install agent create pxe-files --dir {{ install_dir }}/workdir
+      register: pxe_result
+
+    - name: List generated PXE files
+      ansible.builtin.find:
+        paths: "{{ install_dir }}/workdir/boot-artifacts"
+        patterns: "agent.*"
+      register: pxe_files
+
+    - name: Display generated files
+      ansible.builtin.debug:
+        msg: "{{ pxe_files.files | map(attribute='path') | list }}"
+
+    - name: Copy PXE files to router via SCP
+      ansible.builtin.command: >
+        scp -O
+        {{ install_dir }}/workdir/boot-artifacts/{{ item }}
+        {{ router_user }}@{{ router_host }}:/srv/tftp/{{ item }}
+      loop:
+        - agent.x86_64-vmlinuz
+        - agent.x86_64-initrd.img
+        - agent.x86_64-rootfs.img
+
+    - name: Ensure HTTP symlinks exist on router
+      ansible.builtin.command: >
+        ssh {{ router_user }}@{{ router_host }}
+        "mkdir -p /www/pxe &&
+         ln -sf /srv/tftp/agent.x86_64-vmlinuz /www/pxe/ &&
+         ln -sf /srv/tftp/agent.x86_64-initrd.img /www/pxe/ &&
+         ln -sf /srv/tftp/agent.x86_64-rootfs.img /www/pxe/"
+
+    - name: Verify HTTP access to PXE files
+      ansible.builtin.uri:
+        url: "http://{{ router_host }}:8080/pxe/agent.x86_64-vmlinuz"
+        method: HEAD
+      register: http_check
+      ignore_errors: true
+
+    - name: Display result
+      ansible.builtin.debug:
+        msg: |
+          === PXE FILES READY ===
+          Version: {{ ocp_version }}
+          Router:  {{ router_host }}
+          HTTP:    {{ 'ACCESSIBLE' if http_check.status == 200 else 'NOT ACCESSIBLE — check router config' }}
+
+          Next steps:
+          1. PXE boot all 3 nodes (set boot order to network first)
+          2. Run: ansible-playbook playbooks/wait-for-install.yml
