@@ -8,6 +8,15 @@
         state: directory
         mode: "0755"
 
+    - name: Copy Home Assistant configuration
+      ansible.builtin.copy:
+        src: ../files/homeassistant/configuration.yaml.template
+        dest: /opt/homeassistant/config/configuration.yaml
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart homeassistant
+
     - name: Copy Home Assistant quadlet container unit
       ansible.builtin.copy:
         src: ../files/homeassistant/homeassistant.container
