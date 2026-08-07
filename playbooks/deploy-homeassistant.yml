@@ -1,0 +1,66 @@
+---
+- name: Deploy Home Assistant as Podman quadlet
+  hosts: wing
+  tasks:
+    - name: Create Home Assistant config directory
+      ansible.builtin.file:
+        path: /opt/homeassistant/config
+        state: directory
+        mode: "0755"
+
+    - name: Copy Home Assistant quadlet container unit
+      ansible.builtin.copy:
+        src: ../files/homeassistant/homeassistant.container
+        dest: /etc/containers/systemd/homeassistant.container
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload and restart homeassistant
+
+    - name: Flush handlers to reload systemd
+      ansible.builtin.meta: flush_handlers
+
+    - name: Start and enable Home Assistant service
+      ansible.builtin.systemd:
+        name: homeassistant
+        state: started
+        enabled: true
+
+    - name: Wait for Home Assistant to be ready
+      ansible.builtin.wait_for:
+        port: 8123
+        host: 127.0.0.1
+        delay: 10
+        timeout: 120
+
+    - name: Open firewall port for Home Assistant
+      ansible.posix.firewalld:
+        port: 8123/tcp
+        permanent: true
+        immediate: true
+        state: enabled
+
+    - name: Copy Nginx proxy config for Home Assistant
+      ansible.builtin.copy:
+        src: ../files/nginx/conf.d/homeassistant.conf
+        dest: /opt/nginx/conf.d/homeassistant.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart nginx
+
+  handlers:
+    - name: Reload and restart homeassistant
+      ansible.builtin.systemd:
+        daemon_reload: true
+      notify: Restart homeassistant
+
+    - name: Restart homeassistant
+      ansible.builtin.systemd:
+        name: homeassistant
+        state: restarted
+
+    - name: Restart nginx
+      ansible.builtin.systemd:
+        name: nginx-proxy
+        state: restarted

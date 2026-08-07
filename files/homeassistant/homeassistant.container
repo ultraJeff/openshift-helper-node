@@ -1,0 +1,20 @@
+[Unit]
+Description=Home Assistant
+After=local-fs.target network-online.target
+
+[Container]
+Image=ghcr.io/home-assistant/home-assistant:stable
+ContainerName=homeassistant
+Network=host
+Volume=/opt/homeassistant/config:/config:Z
+SecurityLabelDisable=true
+Environment=TZ=America/New_York
+# Uncomment when Z-Wave USB dongle is plugged in:
+# AddDevice=/dev/ttyUSB0
+
+[Service]
+Restart=always
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target default.target
