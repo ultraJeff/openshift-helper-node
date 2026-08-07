@@ -9,8 +9,7 @@ Network=host
 Volume=/opt/homeassistant/config:/config:Z
 SecurityLabelDisable=true
 Environment=TZ=America/New_York
-# Uncomment when Z-Wave USB dongle is plugged in:
-# AddDevice=/dev/ttyUSB0
+AddDevice=/dev/ttyACM0
 
 [Service]
 Restart=always
