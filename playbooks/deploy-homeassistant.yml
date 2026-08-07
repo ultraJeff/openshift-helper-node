@@ -8,6 +8,47 @@
         state: directory
         mode: "0755"
 
+    - name: Create Z-Wave JS UI store directory
+      ansible.builtin.file:
+        path: /opt/zwave-js-ui/store
+        state: directory
+        mode: "0755"
+
+    - name: Copy Z-Wave JS UI quadlet container unit
+      ansible.builtin.copy:
+        src: ../files/homeassistant/zwave-js-ui.container
+        dest: /etc/containers/systemd/zwave-js-ui.container
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload and restart zwave-js-ui
+
+    - name: Flush handlers to reload systemd for Z-Wave
+      ansible.builtin.meta: flush_handlers
+
+    - name: Start and enable Z-Wave JS UI service
+      ansible.builtin.systemd:
+        name: zwave-js-ui
+        state: started
+        enabled: true
+
+    - name: Wait for Z-Wave JS UI to be ready
+      ansible.builtin.wait_for:
+        port: 8091
+        host: 127.0.0.1
+        delay: 10
+        timeout: 120
+
+    - name: Open firewall ports for Z-Wave JS UI
+      ansible.posix.firewalld:
+        port: "{{ item }}"
+        permanent: true
+        immediate: true
+        state: enabled
+      loop:
+        - 8091/tcp
+        - 3000/tcp
+
     - name: Copy Home Assistant configuration
       ansible.builtin.copy:
         src: ../files/homeassistant/configuration.yaml.template
@@ -67,6 +108,16 @@
     - name: Restart homeassistant
       ansible.builtin.systemd:
         name: homeassistant
+        state: restarted
+
+    - name: Reload and restart zwave-js-ui
+      ansible.builtin.systemd:
+        daemon_reload: true
+      notify: Restart zwave-js-ui
+
+    - name: Restart zwave-js-ui
+      ansible.builtin.systemd:
+        name: zwave-js-ui
         state: restarted
 
     - name: Restart nginx

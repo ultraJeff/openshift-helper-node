@@ -1,0 +1,19 @@
+[Unit]
+Description=Z-Wave JS UI
+After=local-fs.target network-online.target
+
+[Container]
+Image=docker.io/zwavejs/zwave-js-ui:latest
+ContainerName=zwave-js-ui
+Network=host
+Volume=/opt/zwave-js-ui/store:/usr/src/app/store:Z
+AddDevice=/dev/ttyACM0
+SecurityLabelDisable=true
+Environment=TZ=America/New_York
+
+[Service]
+Restart=always
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target default.target

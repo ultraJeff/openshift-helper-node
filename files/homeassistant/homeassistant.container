@@ -1,6 +1,6 @@
 [Unit]
 Description=Home Assistant
-After=local-fs.target network-online.target
+After=local-fs.target network-online.target zwave-js-ui.service
 
 [Container]
 Image=ghcr.io/home-assistant/home-assistant:stable
@@ -9,7 +9,6 @@ Network=host
 Volume=/opt/homeassistant/config:/config:Z
 SecurityLabelDisable=true
 Environment=TZ=America/New_York
-AddDevice=/dev/ttyACM0
 
 [Service]
 Restart=always
